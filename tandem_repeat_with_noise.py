@@ -156,40 +156,40 @@ rnn = rnn.cuda()
 print(rnn)
 
 
+for noise in range(4,5):
 
+    ANOTHER_TESTER = 10000
+    trDS_Testing_long = TandemRepeatDataset(b'haafaaa213hb2fersn', ANOTHER_TESTER, noise_ratio=(noise / 100))
 
+    #############################
+    # Test
+    confusion = torch.zeros(TANDEM_LENGTH + 1, TANDEM_LENGTH + 1)
+    for idx in range (0, ANOTHER_TESTER):
+        x, y = trDS_Testing_long[idx]
+        x = x.cuda()
+        y = y.cuda()
+        guess_output = rnn(x.view(-1, SEQUENCE_LENGTH, 4))
+        predict_n, predict_i = guess_output.topk(1)
+        confusion[y][predict_i] += 1
+        if idx % 1000 == 0:
+            print(idx, " out of ", ANOTHER_TESTER)
 
-ANOTHER_TESTER = 10000
-trDS_Testing_long = TandemRepeatDataset(b'haafaasdf123./,.asdfersn', ANOTHER_TESTER, noise_ratio=0.0)
+    for i in range(TANDEM_LENGTH + 1):
+        confusion[i] = confusion[i] / confusion[i].sum()
 
-#############################
-# Test
-confusion = torch.zeros(TANDEM_LENGTH + 1, TANDEM_LENGTH + 1)
-for idx in range (0, ANOTHER_TESTER):
-    x, y = trDS_Testing_long[idx]
-    x = x.cuda()
-    y = y.cuda()
-    guess_output = rnn(x.view(-1, SEQUENCE_LENGTH, 4))
-    predict_n, predict_i = guess_output.topk(1)
-    confusion[y][predict_i] += 1
-    if idx % 1000 == 0:
-        print(idx, " out of ", ANOTHER_TESTER)
-
-for i in range(TANDEM_LENGTH + 1):
-    confusion[i] = confusion[i] / confusion[i].sum()
-
-#############################
-# Plot
-fig = plt.figure(figsize=(11,11))
-ax=fig.add_subplot(1,1,1)
-cax = ax.matshow(confusion.numpy())
-fig.colorbar(cax)
-plt.xlabel('Predicted Result')
-plt.ylabel('Actual Tandem Repeat Size')
-ax.xaxis.set_label_position('top')
-plt.xticks(np.arange(0,TANDEM_LENGTH + 1).tolist())
-plt.yticks(np.arange(0,TANDEM_LENGTH + 1).tolist())
-plt.show()
+    #############################
+    # Plot
+    fig = plt.figure(figsize=(11,11))
+    ax=fig.add_subplot(1,1,1)
+    cax = ax.matshow(confusion.numpy())
+    fig.colorbar(cax)
+    plt.xlabel('Predicted Result')
+    plt.ylabel('Actual Tandem Repeat Size')
+    plt.title("Noise Ratio %f" % (noise/100))
+    ax.xaxis.set_label_position('top')
+    plt.xticks(np.arange(0,TANDEM_LENGTH + 1).tolist())
+    plt.yticks(np.arange(0,TANDEM_LENGTH + 1).tolist())
+    plt.show()
 
 
 """
