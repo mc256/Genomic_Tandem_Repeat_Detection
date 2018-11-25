@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.utils.data as Data
 import matplotlib.pyplot as plt
 import math
+import numpy as np
 import hashlib
 import datetime
 
@@ -150,11 +151,48 @@ class RepeatRNN(nn.Module):
 
 
 rnn = RepeatRNN()
-#rnn = torch.load("./tandem_repeat2018-11-23-21-22-25--SIZE31-SLEN64v3.pkl")
+rnn = torch.load("./temp/tandem_repeat2018-11-23-22-19-54-SIZE31-SLEN64v4.pkl")
 rnn = rnn.cuda()
 print(rnn)
 
 
+
+
+
+ANOTHER_TESTER = 10000
+trDS_Testing_long = TandemRepeatDataset(b'haafaasdf123./,.asdfersn', ANOTHER_TESTER, noise_ratio=0.0)
+
+#############################
+# Test
+confusion = torch.zeros(TANDEM_LENGTH + 1, TANDEM_LENGTH + 1)
+for idx in range (0, ANOTHER_TESTER):
+    x, y = trDS_Testing_long[idx]
+    x = x.cuda()
+    y = y.cuda()
+    guess_output = rnn(x.view(-1, SEQUENCE_LENGTH, 4))
+    predict_n, predict_i = guess_output.topk(1)
+    confusion[y][predict_i] += 1
+    if idx % 1000 == 0:
+        print(idx, " out of ", ANOTHER_TESTER)
+
+for i in range(TANDEM_LENGTH + 1):
+    confusion[i] = confusion[i] / confusion[i].sum()
+
+#############################
+# Plot
+fig = plt.figure(figsize=(11,11))
+ax=fig.add_subplot(1,1,1)
+cax = ax.matshow(confusion.numpy())
+fig.colorbar(cax)
+plt.xlabel('Predicted Result')
+plt.ylabel('Actual Tandem Repeat Size')
+ax.xaxis.set_label_position('top')
+plt.xticks(np.arange(0,TANDEM_LENGTH + 1).tolist())
+plt.yticks(np.arange(0,TANDEM_LENGTH + 1).tolist())
+plt.show()
+
+
+"""
 optimizer = torch.optim.Adam(rnn.parameters(), lr=LR)   # optimize all cnn parameters
 loss_func = nn.CrossEntropyLoss()   # the target label is not one-hotted
 
@@ -201,3 +239,4 @@ for epoch in range(EPOCH):
         if step == 0:
             display_result(confusion)
             save()
+"""
