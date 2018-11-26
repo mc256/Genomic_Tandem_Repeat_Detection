@@ -129,88 +129,71 @@ def display_result(confusion):
 
 
 def save(comment=""):
-    torch.save(cnn,
+    torch.save(rnn,
                "./temp/tandem_repeat"+datetime.datetime.today().strftime('%Y-%m-%d-%H-%M-%S')+comment+
-               "cnn.pkl")
+               "t4.pkl")
 
 
-
-class NoiseCNN(nn.Module):
+class RepeatRNN(nn.Module):
     def __init__(self):
-        self.cnn1 = nn.Sequential(
-            nn.Conv1d(
-                in_channels=4,
-                out_channels=TANDEM_LENGTH + 1,
-                kernel_size=TANDEM_LENGTH // 4,
-                stride=1,
-                padding=0
-            ),
-            nn.ReLU(),
-            nn.MaxPool1d(kernel_size=12)
+        super(RepeatRNN, self).__init__()
+
+        self.rnn = nn.LSTM(
+            input_size=4,       # 4 nucleotides
+            hidden_size=128,     # rnn hidden unit
+            num_layers=2,       # RNN layers
+            batch_first=True,   # (batch, time_step, input_size)
         )
-        self.cnn2 = nn.Sequential(
-            nn.Conv1d(
-                in_channels=4,
-                out_channels=TANDEM_LENGTH + 1,
-                kernel_size=TANDEM_LENGTH // 4,
-                stride=1,
-                padding=0
-            ),
-            nn.ReLU(),
-            nn.MaxPool1d(kernel_size=12)
-        )
-        self.out = nn.Linear(TANDEM_LENGTH + 1,TANDEM_LENGTH)
+
+        self.out = nn.Linear(128, TANDEM_LENGTH + 1)    # output layer
 
     def forward(self, x):
-        r1 = self.cnn1(x)
-        r2 = self.cnn2(r1)
-        return self.out(r2)
+        r_out, (h_n, h_c) = self.rnn(x, None)   # None: hidden state uses 0
 
+        out = self.out(r_out[:, -1, :]) # choose the last output # (batch, time step, input)
+        return out
 
-cnn = NoiseCNN()
-cnn = cnn.cuda()
-print(cnn)
+rnn = RepeatRNN()
+#rnn = torch.load("./temp/tandem_repeat2018-11-23-22-19-54-SIZE31-SLEN64v4.pkl")
+rnn = rnn.cuda()
+print(rnn)
 
-optimizer = torch.optim.Adam(cnn.parameters(), lr=LR)   # optimize all cnn parameters
+optimizer = torch.optim.Adam(rnn.parameters(), lr=LR)   # optimize all cnn parameters
 loss_func = nn.CrossEntropyLoss()   # the target label is not one-hotted
 
 
 ANOTHER_TESTER = 1000
-trDS = TandemRepeatDataset(b'K34JL1ferG5jVasdl21010nzv')
-trDS_Testing = TandemRepeatDataset(b'hav23123412dg3orld', ANOTHER_TESTER, noise_ratio=0.5)
+
+confusion = torch.zeros(TANDEM_LENGTH + 1, TANDEM_LENGTH + 1)
 
 
-train_loader = Data.DataLoader(dataset=trDS, batch_size=BATCH_SIZE, shuffle=True)
+data_source = TandemRepeatDataset(b'salt with no noise. HAVE FUN', noise_ratio=0)
+train_loader = Data.DataLoader(dataset=data_source, batch_size=BATCH_SIZE, shuffle=True)
 
 for epoch in range(EPOCH):
     for step, (x, y, z) in enumerate(train_loader):  # gives batch data
         x = x.cuda()
         y = y.cuda()
-        z = z.cuda()
         b_x = x.view(-1, SEQUENCE_LENGTH, 4)  # reshape x to (batch, time_step, input_size)
         b_y = y
-
-        output = cnn(b_x)  # rnn output
+        output = rnn(b_x)  # rnn output
         loss = loss_func(output, y)  # cross entropy loss
         optimizer.zero_grad()  # clear gradients for this training step
         loss.backward()  # backpropagation, compute gradients
         optimizer.step()  # apply gradients
-
         loss_history_rnn.append(loss.cpu().data.numpy())
-
         if step % 100 == 0:
             #############################
             # Test
             confusion = torch.zeros(TANDEM_LENGTH + 1, TANDEM_LENGTH + 1)
+            testing_source = TandemRepeatDataset(b'hav2231323{}d' + str(step).encode('utf-8') + str(epoch).encode('utf-8'), ANOTHER_TESTER, noise_ratio=0.3)
             for idx in range(0, TEST_SIZE):
-                x, y, z= trDS_Testing[idx]
+                x, y, z = testing_source[idx]
                 x = x.cuda()
                 y = y.cuda()
-                z = z.cuda()
-                guess_output = cnn(x)
+                guess_output = rnn(x.view(-1, SEQUENCE_LENGTH, 4))
                 predict_n, predict_i = guess_output.topk(1)
                 confusion[y][predict_i] += 1
-
             for i in range(TANDEM_LENGTH + 1):
                 confusion[i] = confusion[i] / confusion[i].sum()
             #############################
@@ -218,4 +201,42 @@ for epoch in range(EPOCH):
             print('Epoch: ', epoch, " Step:", step)
         if step == 0:
             display_result(confusion)
-            save()
+
+save("normal")
+
+data_source = TandemRepeatDataset(b'salt with some noise. GOOD LUCK', noise_ratio=0.25)
+train_loader = Data.DataLoader(dataset=data_source, batch_size=BATCH_SIZE, shuffle=True)
+
+for epoch in range(EPOCH):
+    for step, (x, y, z) in enumerate(train_loader):  # gives batch data
+        x = x.cuda()
+        y = y.cuda()
+        b_x = x.view(-1, SEQUENCE_LENGTH, 4)  # reshape x to (batch, time_step, input_size)
+        b_y = y
+        output = rnn(b_x)  # rnn output
+        loss = loss_func(output, y)  # cross entropy loss
+        optimizer.zero_grad()  # clear gradients for this training step
+        loss.backward()  # backpropagation, compute gradients
+        optimizer.step()  # apply gradients
+        loss_history_rnn.append(loss.cpu().data.numpy())
+        if step % 100 == 0:
+            #############################
+            # Test
+            confusion = torch.zeros(TANDEM_LENGTH + 1, TANDEM_LENGTH + 1)
+            testing_source = TandemRepeatDataset(b'hav2231323{}d' + str(step).encode('utf-8') + str(epoch).encode('utf-8'), ANOTHER_TESTER, noise_ratio=0.3)
+            for idx in range(0, TEST_SIZE):
+                x, y, z = testing_source[idx]
+                x = x.cuda()
+                y = y.cuda()
+                guess_output = rnn(x.view(-1, SEQUENCE_LENGTH, 4))
+                predict_n, predict_i = guess_output.topk(1)
+                confusion[y][predict_i] += 1
+            for i in range(TANDEM_LENGTH + 1):
+                confusion[i] = confusion[i] / confusion[i].sum()
+            #############################
+            #############################
+            print('Epoch: ', epoch, " Step:", step)
+        if step == 0:
+            display_result(confusion)
+
+save("with_noise")

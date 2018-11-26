@@ -16,6 +16,7 @@ TANDEM_LENGTH = 31
 TEST_SIZE = 150
 SEQUENCE_LENGTH = 64
 MD5_LENGTH = 16
+TRIM_SIZE = TANDEM_LENGTH
 
 class TandemRepeatDataset(torch.utils.data.Dataset):
     init_mat = [
@@ -28,14 +29,12 @@ class TandemRepeatDataset(torch.utils.data.Dataset):
     def __init__(self,
                  salt=b'THIS SHOULD BE SALT',
                  sample_size=SAMPLE_SIZE,
-                 noise_ratio=0.0,
-                 trim_to=SEQUENCE_LENGTH
+                 noise_ratio=0
                  ):
         super(TandemRepeatDataset, self).__init__()
         self.salt_a, self.salt_b = salt[:len(salt) // 2], salt[len(salt) // 2:]
         self.sample_size = sample_size
         self.noise_ratio = noise_ratio
-        self.trim_to = trim_to
 
     def __len__(self):
         return self.sample_size
@@ -45,7 +44,7 @@ class TandemRepeatDataset(torch.utils.data.Dataset):
         return self.init_mat[t]
 
     def data_to_string(data):
-        x, y, z = data
+        x, y = data
         dna_sequence = ""
         for item in x.numpy():
             if item[0] == 1:
@@ -56,7 +55,7 @@ class TandemRepeatDataset(torch.utils.data.Dataset):
                 dna_sequence += "C"
             else:
                 dna_sequence += "G"
-        print(dna_sequence, " -- repeat size: ", y.numpy(), " -- noise size: ", z.numpy())
+        print(dna_sequence, " -- repeat size: ", y.numpy())
 
     def string_to_data(seq, size):
         x = []
@@ -89,7 +88,7 @@ class TandemRepeatDataset(torch.utils.data.Dataset):
         #################################################################################
         # Compute the noise ratio
         ################ May violate "equally likely rule"
-        noise_max_len = math.floor(SEQUENCE_LENGTH * self.noise_ratio)
+        noise_max_len = math.floor(SEQUENCE_LENGTH * self.noise_ratio);
         if (noise_max_len != 0):
             noise_len = (control_hash[3] + control_hash[4] + control_hash[5]) % noise_max_len  # how long the noise pattern is
             noise_offset = control_hash[2] % SEQUENCE_LENGTH  # where the noise pattern starts
@@ -105,7 +104,8 @@ class TandemRepeatDataset(torch.utils.data.Dataset):
             for i in range(0, noise_len):
                 sequence[(i + noise_offset) % SEQUENCE_LENGTH] = self.convert(noise_hash[i // 4] >> (i % 4 * 2))
         #################################################################################
-        return torch.tensor(sequence[:self.trim_to]).float(), torch.tensor(repeat_len), torch.tensor(noise_len)
+        return torch.tensor(sequence[:TRIM_SIZE]).float(), torch.tensor(repeat_len), torch.tensor(noise_len)
+
 
 loss_history_rnn = []
 
@@ -128,13 +128,39 @@ def display_result(confusion):
     plt.show()
 
 
-def save(comment=""):
-    torch.save(cnn,
-               "./temp/tandem_repeat"+datetime.datetime.today().strftime('%Y-%m-%d-%H-%M-%S')+comment+
-               "cnn.pkl")
+def save():
+    torch.save(rnn,
+               "./temp/tandem_repeat"+datetime.datetime.today().strftime('%Y-%m-%d-%H-%M-%S')+
+               "-SIZE"+str(TANDEM_LENGTH)+
+               "-SLEN"+str(SEQUENCE_LENGTH)+
+               "v4.pkl")
 
 
+class RepeatRNN(nn.Module):
+    def __init__(self):
+        super(RepeatRNN, self).__init__()
 
+        self.rnn = nn.LSTM(
+            input_size=4,       # 4 nucleotides
+            hidden_size=128,     # rnn hidden unit
+            num_layers=1,       # RNN layers
+            batch_first=True,   # (batch, time_step, input_size)
+        )
+
+        self.out = nn.Linear(128, TANDEM_LENGTH + 1)    # output layer
+
+    def forward(self, x):
+        r_out, (h_n, h_c) = self.rnn(x, None)   # None: hidden state uses 0
+
+        out = self.out(r_out[:, -1, :]) # choose the last output # (batch, time step, input)
+        return out
+
+rnn = RepeatRNN()
+rnn = torch.load("./temp/tandem_repeat2018-11-23-22-19-54-SIZE31-SLEN64v4.pkl")
+rnn = rnn.cuda()
+print(rnn)
+
+"""
 class NoiseCNN(nn.Module):
     def __init__(self):
         self.cnn1 = nn.Sequential(
@@ -145,7 +171,7 @@ class NoiseCNN(nn.Module):
                 stride=1,
                 padding=0
             ),
-            nn.ReLU(),
+            nn.ReLU,
             nn.MaxPool1d(kernel_size=12)
         )
         self.cnn2 = nn.Sequential(
@@ -156,66 +182,51 @@ class NoiseCNN(nn.Module):
                 stride=1,
                 padding=0
             ),
-            nn.ReLU(),
+            nn.ReLU,
             nn.MaxPool1d(kernel_size=12)
         )
         self.out = nn.Linear(TANDEM_LENGTH + 1,TANDEM_LENGTH)
 
     def forward(self, x):
-        r1 = self.cnn1(x)
-        r2 = self.cnn2(r1)
-        return self.out(r2)
+        x = self.cnn1(x)
+        x = self.cnn2(x)
+        return self.out(x)
 
+"""
 
-cnn = NoiseCNN()
-cnn = cnn.cuda()
-print(cnn)
+for t_length in range(33, 50):
 
-optimizer = torch.optim.Adam(cnn.parameters(), lr=LR)   # optimize all cnn parameters
-loss_func = nn.CrossEntropyLoss()   # the target label is not one-hotted
+    ANOTHER_TESTER = 10000
+    TRIM_SIZE = t_length
+    trDS_Testing_long = TandemRepeatDataset(b'haaasdf234asdg213hb2fersn', ANOTHER_TESTER)
 
-
-ANOTHER_TESTER = 1000
-trDS = TandemRepeatDataset(b'K34JL1ferG5jVasdl21010nzv')
-trDS_Testing = TandemRepeatDataset(b'hav23123412dg3orld', ANOTHER_TESTER, noise_ratio=0.5)
-
-
-train_loader = Data.DataLoader(dataset=trDS, batch_size=BATCH_SIZE, shuffle=True)
-
-for epoch in range(EPOCH):
-    for step, (x, y, z) in enumerate(train_loader):  # gives batch data
+    #############################
+    # Test
+    confusion = torch.zeros(TANDEM_LENGTH + 1, TANDEM_LENGTH + 1)
+    for idx in range (0, ANOTHER_TESTER):
+        x, y, z = trDS_Testing_long[idx]
         x = x.cuda()
         y = y.cuda()
-        z = z.cuda()
-        b_x = x.view(-1, SEQUENCE_LENGTH, 4)  # reshape x to (batch, time_step, input_size)
-        b_y = y
+        guess_output = rnn(x.view(-1, TRIM_SIZE, 4))
+        predict_n, predict_i = guess_output.topk(1)
+        confusion[y][predict_i] += 1
+        if idx % 1000 == 0:
+            print(idx, " out of ", ANOTHER_TESTER)
 
-        output = cnn(b_x)  # rnn output
-        loss = loss_func(output, y)  # cross entropy loss
-        optimizer.zero_grad()  # clear gradients for this training step
-        loss.backward()  # backpropagation, compute gradients
-        optimizer.step()  # apply gradients
+    for i in range(TANDEM_LENGTH + 1):
+        confusion[i] = confusion[i] / confusion[i].sum()
 
-        loss_history_rnn.append(loss.cpu().data.numpy())
-
-        if step % 100 == 0:
-            #############################
-            # Test
-            confusion = torch.zeros(TANDEM_LENGTH + 1, TANDEM_LENGTH + 1)
-            for idx in range(0, TEST_SIZE):
-                x, y, z= trDS_Testing[idx]
-                x = x.cuda()
-                y = y.cuda()
-                z = z.cuda()
-                guess_output = cnn(x)
-                predict_n, predict_i = guess_output.topk(1)
-                confusion[y][predict_i] += 1
-
-            for i in range(TANDEM_LENGTH + 1):
-                confusion[i] = confusion[i] / confusion[i].sum()
-            #############################
-            #############################
-            print('Epoch: ', epoch, " Step:", step)
-        if step == 0:
-            display_result(confusion)
-            save()
+    #############################
+    # Plot
+    fig = plt.figure(figsize=(11,11))
+    ax=fig.add_subplot(1,1,1)
+    cax = ax.matshow(confusion.numpy())
+    fig.colorbar(cax)
+    plt.xlabel('Predicted Result')
+    plt.ylabel('Actual Tandem Repeat Size')
+    plt.title("Sequence Length %d bps" % TRIM_SIZE)
+    ax.xaxis.set_label_position('top')
+    plt.xticks(np.arange(0,TANDEM_LENGTH + 1).tolist())
+    plt.yticks(np.arange(0,TANDEM_LENGTH + 1).tolist())
+    #plt.show()
+    fig.savefig("./proofs/seq_len%d.png" % TRIM_SIZE)
