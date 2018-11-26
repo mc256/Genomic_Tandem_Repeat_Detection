@@ -12,9 +12,9 @@ EPOCH = 10
 LR = 0.001
 SAMPLE_SIZE = 200000
 BATCH_SIZE = 200
-TANDEM_LENGTH = 31
+TANDEM_LENGTH = 7
 TEST_SIZE = 150
-SEQUENCE_LENGTH = 64
+SEQUENCE_LENGTH = 32
 MD5_LENGTH = 16
 
 class RepeatRNN(nn.Module):
@@ -37,8 +37,9 @@ class RepeatRNN(nn.Module):
         return out
 
 rnn = RepeatRNN()
-#rnn = torch.load("./temp/tandem_repeat2018-11-25-21-01-41with_noiset4.pkl")
-rnn = torch.load("./temp/tandem_repeat2018-11-25-20-55-07normalt4.pkl")
+rnn = torch.load("./temp/tandem_repeat2018-11-26-11-19-18w0.5n_st6.pkl") # with 50% noise
+#rnn = torch.load("./temp/tandem_repeat2018-11-25-23-00-41w_n_st6.pkl") # with noise
+#rnn = torch.load("./temp/tandem_repeat2018-11-25-22-55-46wo_n_st6.pkl") # no noise
 rnn = rnn.cuda()
 print(rnn)
 
@@ -57,22 +58,26 @@ def string_to_data(seq):
     return torch.tensor(x).float()
 
 
-tracking_heat_map = []
-top_val = []
+#tracking_heat_map = []
+#top_val = []
 seq_records  = SeqIO.parse("D:/owncloud/Education/EECS4425+/Assignment/a1/DSM4304.fasta","fasta")
 for record in seq_records:
     seq = record.seq
     #print(repr(seq))
-    for idx in range(0,9000, SEQUENCE_LENGTH):
+    for idx in range(0,len(seq), SEQUENCE_LENGTH):
         #print(seq[idx:idx+SEQUENCE_LENGTH])
         vector = string_to_data(seq[idx:idx+SEQUENCE_LENGTH])
         k = rnn(vector.cuda().view(-1, SEQUENCE_LENGTH, 4))
         y_axis = k.cpu().detach().squeeze().tolist()
-        tracking_heat_map.append(y_axis)
+        #tracking_heat_map.append(y_axis)
         y_n, y_i = k.topk(1)
-        top_val.append(y_i.cpu().item())
-
-fig = plt.figure(figsize=(15,5))
+        #top_val.append(y_i.cpu().item())
+        predicted_result = y_i.cpu().item()
+        if predicted_result != 0:
+            print(idx, "-->", predicted_result)
+            print(seq[idx:idx + SEQUENCE_LENGTH])
+"""
+fig = plt.figure(figsize=(15,2))
 ax=fig.add_subplot(1,1,1)
 cax = ax.matshow(np.transpose(np.array(tracking_heat_map, int)))
 x = 0
@@ -84,3 +89,4 @@ plt.xlabel('Sequence location / 64')
 plt.ylabel('Predict Repeat Size')
 ax.xaxis.set_label_position('top')
 plt.show()
+"""
