@@ -8,6 +8,65 @@ import hashlib
 import datetime
 from Bio import SeqIO
 
+
+class Node:
+    leaves = []
+    nodes = []
+    value = ""
+
+    def __init__(self):
+        self.leaves = []
+        self.nodes = []
+        self.value = ""
+        pass
+
+    def checkNodes(self, st):
+        for idx in range(0, len(self.nodes)):
+            if self.nodes[idx].value == st[0]:
+                self.nodes[idx].addSuffix(st[1:])
+                return True
+        return False
+
+    def checkLeaves(self, st):
+        for idx in range(0, len(self.leaves)):
+            leaf = self.leaves[idx]
+            if leaf[0] == st[0]:
+                node = Node()
+                node.value = leaf[0]
+                node.addSuffix(st[1:])
+                node.addSuffix(leaf[1:])
+                self.nodes.append(node)
+                del self.leaves[idx]
+                return
+        self.leaves.append(st)
+
+    def addSuffix(self, st):
+        if len(st) == 0 or st == "":
+            return
+        else:
+            if not self.checkNodes(st):
+                self.checkLeaves(st)
+
+    def getLongestRepeatedSubString(self):
+        str = ""
+        for idx in range(0, len(self.nodes)):
+            temp = self.nodes[idx].getLongestRepeatedSubString()
+            if len(temp) > len(str):
+                str = temp
+        return self.value + str
+
+
+class LongestRepeatSubSequence:
+    def __init__(self, sequence=""):
+        self.sequence = sequence
+        self.root = Node()
+        for idx in range(0, len(sequence)):
+            self.root.addSuffix(sequence[idx:])
+
+    def get_LRS(self):
+        return self.root.getLongestRepeatedSubString()
+
+
 EPOCH = 10
 LR = 0.001
 SAMPLE_SIZE = 200000
@@ -37,9 +96,7 @@ class RepeatRNN(nn.Module):
         return out
 
 rnn = RepeatRNN()
-#rnn = torch.load("./temp/tandem_repeat2018-11-26-11-19-18w0.5n_st6.pkl") # with 50% noise
-#rnn = torch.load("./temp/tandem_repeat2018-11-25-23-00-41w_n_st6.pkl") # with noise
-rnn = torch.load("./temp/tandem_repeat2018-11-25-22-55-46wo_n_st6.pkl") # no noise
+rnn = torch.load("./temp/tandem_repeat2018-12-06-17-41-42wo_n_s_LARG_NBt8.pkl") # no noise
 rnn = rnn.cuda()
 print(rnn)
 
@@ -63,6 +120,7 @@ def string_to_data(seq):
 seq_records  = SeqIO.parse("D:/owncloud/Education/EECS4425+/Assignment/a1/DSM4304.fasta","fasta")
 for record in seq_records:
     seq = record.seq
+    count = 0
     #print(repr(seq))
     for idx in range(0,len(seq), SEQUENCE_LENGTH):
         #print(seq[idx:idx+SEQUENCE_LENGTH])
@@ -75,20 +133,11 @@ for record in seq_records:
         predicted_result = predicted_result.numpy()
         #print(predicted_result)
         if predicted_result[0][0] != 0:
-            signal = signal.numpy()
-            print(idx, "-->", predicted_result[0], signal[0])
-            print(seq[idx:idx + SEQUENCE_LENGTH])
-"""
-fig = plt.figure(figsize=(15,2))
-ax=fig.add_subplot(1,1,1)
-cax = ax.matshow(np.transpose(np.array(tracking_heat_map, int)))
-x = 0
-for item in top_val:
-    ax.text(x, item, 'x', va='center', ha='center', color='red')
-    x+=1
-fig.colorbar(cax)
-plt.xlabel('Sequence location / 64')
-plt.ylabel('Predict Repeat Size')
-ax.xaxis.set_label_position('top')
-plt.show()
-"""
+            #signal = signal.numpy()
+            print("%10d" % idx, "-->", predicted_result[0], end='  ')
+            print(seq[idx:idx + SEQUENCE_LENGTH],end=" ")
+            test = LongestRepeatSubSequence(seq[idx:idx + SEQUENCE_LENGTH])
+            print("Repeat:",test.get_LRS())
+            count += 1
+
+print("total %d " % count)
