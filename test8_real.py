@@ -110,20 +110,26 @@ def string_to_data(seq):
             x.append([0, 1, 0, 0])
         elif ch == 'C':
             x.append([0, 0, 1, 0])
-        else:
+        elif ch == 'G':
             x.append([0, 0, 0, 1])
+        else:
+            x.append([0, 0, 0, 0])
     return torch.tensor(x).float()
 
 
 #tracking_heat_map = []
 #top_val = []
-seq_records  = SeqIO.parse("D:/owncloud/Education/EECS4425+/Assignment/a1/DSM4304.fasta","fasta")
+#seq_records  = SeqIO.parse("D:/owncloud/Education/EECS4425+/Assignment/a1/DSM4304.fasta","fasta")
+#seq_records  = SeqIO.parse("D:/CM010885.1.fasta","fasta")
+seq_records  = SeqIO.parse("D:/AF047825.1.fasta","fasta")
 for record in seq_records:
     seq = record.seq
     count = 0
     #print(repr(seq))
-    for idx in range(0,len(seq), SEQUENCE_LENGTH):
+    for idx in range(0,len(seq) - 31, SEQUENCE_LENGTH):
         #print(seq[idx:idx+SEQUENCE_LENGTH])
+        if seq[idx] == "N":
+            continue
         vector = string_to_data(seq[idx:idx+SEQUENCE_LENGTH])
         k = rnn(vector.cuda().view(-1, SEQUENCE_LENGTH, 4))
         y_axis = k.cpu().detach().squeeze().tolist()
@@ -134,10 +140,11 @@ for record in seq_records:
         #print(predicted_result)
         if predicted_result[0][0] != 0:
             #signal = signal.numpy()
-            print("%10d" % idx, "-->", predicted_result[0], end='  ')
+            print("%10d -->[%2d %2d %2d %2d]" % (idx, predicted_result[0][0], predicted_result[0][1], predicted_result[0][2], predicted_result[0][3]), end='  ')
             print(seq[idx:idx + SEQUENCE_LENGTH],end=" ")
             test = LongestRepeatSubSequence(seq[idx:idx + SEQUENCE_LENGTH])
-            print("Repeat:",test.get_LRS())
+            print("Repeat:",test.get_LRS(), end="")
+            print()
             count += 1
 
 print("total %d " % count)
