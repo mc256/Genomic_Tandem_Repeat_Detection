@@ -119,8 +119,8 @@ def string_to_data(seq):
 
 #tracking_heat_map = []
 #top_val = []
-#seq_records  = SeqIO.parse("D:/owncloud/Education/EECS4425+/Assignment/a1/DSM4304.fasta","fasta")
-seq_records  = SeqIO.parse("C:/Users/masterchan/Desktop/CM010885.1.fasta","fasta")
+seq_records  = SeqIO.parse("D:/owncloud/Education/EECS4425+/Assignment/a1/DSM4304.fasta","fasta")
+#seq_records  = SeqIO.parse("C:/Users/masterchan/Desktop/CM010885.1.fasta","fasta")
 #seq_records  = SeqIO.parse("D:/AF047825.1.fasta","fasta")
 for record in seq_records:
     seq = record.seq
